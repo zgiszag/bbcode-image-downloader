@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>BBCode Image Downloader</title>
   <style>
-    :root { --bg:#0b0f12; --card:#131a20; --muted:#8aa0b2; --text:#e7eef5; --accent:#69c; --danger:#f66; --ok:#6c6; }
+    :root { --bg:#0b0f12; --card:#131a20; --muted:#8aa0b2; --text:#e7eef5; --accent:#69c; --danger:#f66; }
     *{box-sizing:border-box}html,body{height:100%}
     body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;background:linear-gradient(145deg,#0b0f12,#0e1216 55%,#0b0f12);color:var(--text)}
     .container{max-width:1100px;margin:32px auto;padding:0 16px}
@@ -31,7 +31,6 @@
     .tog{display:flex;align-items:center;gap:8px}
     .chips{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px}
     .chips .tog{border:1px solid #23323e;background:#0f1b23;padding:6px 10px;border-radius:10px}
-    .twocol{display:grid;grid-template-columns:1fr 1fr; gap:10px; align-items:end; margin-top:10px}
   </style>
 </head>
 <body>
@@ -40,7 +39,7 @@
     <div class="card row">
       <div>
         <label for="inputText">Paste your HTML / BBCode</label>
-        <textarea id="inputText" placeholder="[img]https://example.com/pic.jpg[/img] or [url=PHOTO_PAGE][img]THUMB.jpg[/img][/url]"></textarea>
+        <textarea id="inputText" placeholder="[url=https://www.imagefap.com/photo/ID][img]THUMB.jpg[/img][/url]"></textarea>
 
         <div class="controls">
           <div class="field">
@@ -62,28 +61,15 @@
         </div>
 
         <div class="chips">
-          <label class="tog"><input id="useUrlTargets" type="checkbox" /> Use [url=...] targets</label>
-          <label class="tog"><input id="resolveFull" type="checkbox" /> Resolve full-size from page (via proxy)</label>
-          <label class="tog"><input id="preferOg" type="checkbox" checked /> Prefer og:image/twitter:image</label>
-          <label class="tog"><input id="repairNonImages" type="checkbox" checked /> Auto-repair non-image responses</label>
+          <label class="tog"><input id="useUrlTargets" type="checkbox" checked /> Use [url=...] targets</label>
+          <label class="tog"><input id="resolveFull" type="checkbox" checked /> Resolve full-size from page (via proxy)</label>
+          <label class="tog"><input id="preferOg" type="checkbox" /> Prefer og:image/twitter:image (disable for ImageFap)</label>
           <label class="tog"><input id="fixExtensions" type="checkbox" checked /> Fix file extension by Content-Type</label>
-        </div>
-
-        <div class="twocol">
-          <div class="field">
-            <label for="rewriteFrom">Optional rewrite: Search (regex)</label>
-            <input id="rewriteFrom" type="text" placeholder="/frame-thumb/" />
-          </div>
-          <div class="field">
-            <label for="rewriteTo">Replace with</label>
-            <input id="rewriteTo" type="text" placeholder="/full/" />
-          </div>
         </div>
 
         <div class="btns">
           <button id="extractBtn">Extract URLs</button>
           <button id="zipBtn">Download as ZIP</button>
-          <button id="multiBtn">Direct multi-download</button>
           <button id="clearBtn" class="btn-danger">Clear</button>
         </div>
 
@@ -95,7 +81,7 @@
 
         <div class="progress-wrap">
           <progress id="prog" value="0" max="100"></progress>
-          <div class="note">If you see “files don’t open”, it’s often an HTML/403 page saved as .jpg. v3 auto-detects and tries to repair by fetching the real image from the page. Use the proxy.</div>
+          <div class="note">Site-specific resolver for <b>imagefap.com</b> that reads the page and fetches the <code>#photo</code> / full-size image with the page as Referer. Use the proxy.</div>
         </div>
 
         <div class="log" id="log" aria-live="polite"></div>
@@ -106,10 +92,6 @@
         <div id="preview" class="preview"></div>
       </div>
     </div>
-
-    <p class="note" style="margin-top:14px">
-      ZIP mode uses <code>fetch</code>. For hosts with CORS or hotlink protection, tick <b>Use proxy</b>. This build validates <em>Content-Type</em>, fixes file extensions, skips zero-byte files, and attempts to repair non-image responses by extracting the real image from the HTML.
-    </p>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
@@ -117,7 +99,9 @@
     const $ = s => document.querySelector(s);
     const logEl = $("#log"), preview = $("#preview"), prog = $("#prog");
     const countEl = $("#count"), validEl = $("#valid"), dupesEl = $("#dupes");
-    let urls = []; // final list of image URLs
+
+    // items: { url: string, ref?: string }
+    let items = [];
 
     const sanitize = s => s.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 100);
     const extFromCT = (ct) => {
@@ -137,199 +121,202 @@
     function extractFromBBCode(text) {
       const found = [];
       const reImg = /\[img\]([^\[]+?)\[\/img\]/gi;
-      let m; while ((m = reImg.exec(text)) !== null) found.push(m[1].trim());
+      let m; while ((m = reImg.exec(text)) !== null) found.push({url:m[1].trim()});
       const reHtml = /<img[^>]+src=['"]([^'">]+)['"]/gi;
-      while ((m = reHtml.exec(text)) !== null) found.push(m[1].trim());
+      while ((m = reHtml.exec(text)) !== null) found.push({url:m[1].trim()});
       const reUrl = /(https?:\/\/[\w\-._~:/?#\[\]@!$&'()*+,;=%]+\.(?:png|jpe?g|gif|webp|bmp|svg)(?:\?[^\s'"]*)?)/gi;
-      while ((m = reUrl.exec(text)) !== null) found.push(m[1].trim());
+      while ((m = reUrl.exec(text)) !== null) found.push({url:m[1].trim()});
       return found;
     }
     function extractPageLinks(text) {
       const targets = [];
       const reUrlTag = /\[url=([^\]]+)\][\s\S]*?\[\/url\]/gi;
-      let m; while ((m = reUrlTag.exec(text)) !== null) { targets.push(m[1].trim()); }
+      let m; while ((m = reUrlTag.exec(text)) !== null) targets.push(m[1].trim());
       return targets;
     }
-    function uniqHttp(list) {
+    function uniqByUrl(list) {
       const uniq = [], seen = new Set();
-      for (let u of list) {
+      for (const it of list) {
+        const u = it.url;
         if (!/^https?:\/\//i.test(u)) continue;
         if (seen.has(u)) continue;
-        seen.add(u); uniq.push(u);
+        seen.add(u); uniq.push(it);
       }
       return uniq;
     }
-    function applyRewrite(list) {
-      const from = $("#rewriteFrom").value.trim();
-      const to = $("#rewriteTo").value;
-      if (!from) return list;
-      try {
-        const rx = new RegExp(from);
-        return list.map(u => u.replace(rx, to));
-      } catch {
-        log("Rewrite regex invalid; skipping.");
-        return list;
-      }
-    }
+
     function renderPreview(list) {
       preview.innerHTML = "";
-      list.forEach((u,i)=>{
+      list.forEach((it,i)=>{
         const div = document.createElement("div"); div.className="thumb";
-        const img = document.createElement("img"); img.loading="lazy"; img.referrerPolicy="no-referrer"; img.src=u;
+        const img = document.createElement("img"); img.loading="lazy"; img.referrerPolicy="no-referrer"; img.src=it.url;
         const ix = document.createElement("div"); ix.className="ix"; ix.textContent=String(i+1);
         div.appendChild(img); div.appendChild(ix); preview.appendChild(div);
       });
     }
 
-    async function resolveFullFromPages(pages) {
+    async function fetchTextViaProxy(url, ref) {
       const useProxy = $("#useProxy").checked;
       const origin = ($("#proxyOrigin").value||"").trim();
-      if (!useProxy || !origin) { alert("Resolving from pages requires proxy. Enable Use proxy and set origin."); return []; }
-      log("Resolving full-size image URLs from photo pages via proxy...");
-      const out = [];
-      let done=0; prog.max = pages.length; prog.value=0;
-      for (const p of pages) {
-        try {
-          const res = await fetch(origin.replace(/\/$/,'') + "/proxy?url=" + encodeURIComponent(p), { mode:"cors" });
-          if (!res.ok) throw new Error("HTTP "+res.status);
-          const html = await res.text();
-          const base = p;
-          let m = html.match(/<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/i) ||
-                  html.match(/<meta\s+name=["']twitter:image["']\s+content=["']([^"']+)["']/i);
-          if (!m) {
-            const imgs = Array.from(html.matchAll(/<img[^>]+src=["']([^"']+)["'][^>]*>/gi)).map(mm=>mm[1]);
-            const pref = imgs.find(u=>/\.(?:jpg|jpeg|png|webp)(?:\?|$)/i.test(u) && /full|large|big|photo/i.test(u));
-            out.push(makeAbs(pref || imgs[0] || p, base));
-          } else {
-            out.push(makeAbs(m[1], base));
-          }
-        } catch(e) {
-          log("Resolve FAIL: "+p+" — "+e.message);
-          out.push(p);
-        } finally {
-          done++; prog.value=done;
+      if (!useProxy || !origin) throw new Error("Proxy required for cross-origin HTML");
+      const prox = origin.replace(/\/$/,'') + "/proxy?url=" + encodeURIComponent(url) + (ref ? "&ref=" + encodeURIComponent(ref) : "");
+      const res = await fetch(prox, { mode:"cors" });
+      if (!res.ok) throw new Error("HTTP "+res.status);
+      return res.text();
+    }
+
+    function extractLargestFromSrcset(srcset, base) {
+      if (!srcset) return null;
+      try {
+        const parts = srcset.split(",").map(s=>s.trim()).filter(Boolean);
+        if (!parts.length) return null;
+        const last = parts[parts.length-1].split(" ")[0];
+        return makeAbs(last, base);
+      } catch { return null; }
+    }
+
+    function imagefapPickFull(doc, pageUrl) {
+      // 1) Specific selectors seen on ImageFap variants
+      const cand = doc.querySelector("img#photo, img#mainPhoto, img.photo, img#image, img#thepic, img#pic");
+      if (cand) {
+        const ss = cand.getAttribute("srcset");
+        if (ss) {
+          const best = extractLargestFromSrcset(ss, pageUrl);
+          if (best) return best;
         }
+        const src = cand.getAttribute("src") || cand.getAttribute("data-src") || cand.getAttribute("data-big-src");
+        if (src) return makeAbs(src, pageUrl);
       }
-      return uniqHttp(out);
+      // 2) Look for download links
+      const a = doc.querySelector('a[href*="download"], a#download, a.download, a.downloadLink');
+      if (a && a.getAttribute("href")) return makeAbs(a.getAttribute("href"), pageUrl);
+      // 3) Fallback: biggest plausible <img>
+      const imgs = Array.from(doc.querySelectorAll("img"));
+      // prefer ones containing "full", "big", "photo"
+      const pref = imgs.find(im => /\.(?:jpg|jpeg|png|webp)(?:\?|$)/i.test(im.src) && /full|large|big|photo|image/i.test(im.src));
+      if (pref) return makeAbs(pref.getAttribute("src"), pageUrl);
+      if (imgs[0]) return makeAbs(imgs[0].getAttribute("src"), pageUrl);
+      return null;
+    }
+
+    async function resolveFromPage(pageUrl) {
+      // Avoid og:image for ImageFap; it's often a thumb
+      const html = await fetchTextViaProxy(pageUrl, null);
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, "text/html");
+
+      const host = (new URL(pageUrl)).hostname;
+      let candidate = null;
+
+      if (/imagefap\.com$/i.test(host)) {
+        candidate = imagefapPickFull(doc, pageUrl);
+      }
+      // Generic fallback if still nothing: og:image or twitter:image
+      if (!candidate && $("#preferOg").checked) {
+        const og = doc.querySelector('meta[property="og:image"][content], meta[name="twitter:image"][content]');
+        if (og) candidate = makeAbs(og.getAttribute("content"), pageUrl);
+      }
+      // Final generic fallback: first image
+      if (!candidate) {
+        const any = doc.querySelector("img");
+        if (any) candidate = makeAbs(any.getAttribute("src"), pageUrl);
+      }
+      return candidate || pageUrl;
     }
 
     $("#extractBtn").addEventListener("click", async () => {
       const text = $("#inputText").value || "";
-      const useTargets = $("#useUrlTargets").checked;
+      const wantTargets = $("#useUrlTargets").checked;
       const wantResolve = $("#resolveFull").checked;
 
-      let imgCandidates = extractFromBBCode(text);
-      let final = uniqHttp(imgCandidates);
+      const imgItems = extractFromBBCode(text);
+      let out = [...imgItems];
+      const pages = wantTargets ? extractPageLinks(text) : [];
 
-      if (useTargets) {
-        const pages = uniqHttp(extractPageLinks(text));
-        if (pages.length) {
-          if (wantResolve) {
-            const resolved = await resolveFullFromPages(pages);
-            final = uniqHttp(final.concat(resolved));
-          } else {
-            final = uniqHttp(final.concat(pages));
+      if (pages.length && wantResolve) {
+        log("Resolving full-size images from pages (with per-page Referer)...");
+        prog.max = pages.length; prog.value = 0; let done=0;
+        for (const p of pages) {
+          try {
+            const real = await resolveFromPage(p);
+            out.push({url: real, ref: p}); // keep referrer for proxy
+          } catch (e) {
+            log("Resolve FAIL: "+p+" — "+e.message);
+            out.push({url:p});
+          } finally {
+            done++; prog.value = done;
           }
         }
+      } else if (pages.length) {
+        out = out.concat(pages.map(p => ({url:p})));
       }
 
-      final = applyRewrite(final);
-
-      urls = final;
-      countEl.textContent = String(imgCandidates.length);
-      validEl.textContent = String(final.length);
-      dupesEl.textContent = String(imgCandidates.length - final.length);
-      renderPreview(urls);
-      log(`Prepared ${final.length} URLs.`);
+      items = uniqByUrl(out);
+      countEl.textContent = String(imgItems.length);
+      validEl.textContent = String(items.length);
+      dupesEl.textContent = String(imgItems.length - items.length);
+      renderPreview(items);
+      log(`Prepared ${items.length} URLs.`);
     });
 
     $("#clearBtn").addEventListener("click", () => {
-      $("#inputText").value = ""; urls = [];
+      $("#inputText").value = ""; items = [];
       countEl.textContent = validEl.textContent = dupesEl.textContent = "0";
       preview.innerHTML = ""; prog.value = 0; logEl.textContent="";
     });
 
-    async function fetchAsImageOrRepair(u, idx, folderZip, opts) {
+    async function fetchBlobViaProxy(u, ref) {
       const useProxy = $("#useProxy").checked;
       const origin = ($("#proxyOrigin").value||"").trim();
-      const repair = $("#repairNonImages").checked;
-      const fixExt = $("#fixExtensions").checked;
-
-      const nameBase = sanitize(String(idx+1).padStart(3,"0")+"_"+basename(u));
-      const target = useProxy ? origin.replace(/\/$/,'') + "/proxy?url=" + encodeURIComponent(u) : u;
-
-      try {
-        let res = await fetch(target, { mode:"cors", referrerPolicy:"no-referrer" });
+      if (!useProxy || !origin) {
+        // Try direct, may fail due to CORS
+        const res = await fetch(u, { mode:"cors", referrerPolicy:"no-referrer" });
         if (!res.ok) throw new Error("HTTP "+res.status);
-        const ct = res.headers.get("content-type") || "";
-        if (!ct.startsWith("image/")) {
-          const text = await res.text();
-          if (!repair) throw new Error("Non-image content ("+ct+"), repair disabled");
-          let m = text.match(/<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/i) ||
-                  text.match(/<meta\s+name=["']twitter:image["']\s+content=["']([^"']+)["']/i);
-          let cand = m ? m[1] : null;
-          if (!cand) {
-            const imgs = Array.from(text.matchAll(/<img[^>]+src=["']([^"']+)["'][^>]*>/gi)).map(mm=>mm[1]);
-            cand = imgs.find(x=>/\.(?:jpg|jpeg|png|webp|gif)(?:\?|$)/i.test(x)) || imgs[0];
-          }
-          if (!cand) throw new Error("Non-image response; no image candidate found");
-          const abs = makeAbs(cand, u);
-          const prox = useProxy ? origin.replace(/\/$/,'') + "/proxy?url=" + encodeURIComponent(abs) : abs;
-          res = await fetch(prox, { mode:"cors", referrerPolicy:"no-referrer" });
-          if (!res.ok) throw new Error("Repair fetch failed HTTP "+res.status);
-          const ct2 = res.headers.get("content-type") || "";
-          const blob2 = await res.blob();
-          if (blob2.size === 0) throw new Error("Repaired image is empty");
-          let name = nameBase;
-          if (fixExt) {
-            const ext = extFromCT(ct2) || "";
-            const baseNoExt = name.replace(/\.[^.]+$/, "");
-            name = baseNoExt + (ext || "");
-          }
-          folderZip.file(name, blob2);
-          return {ok:true, name, url: u, repaired: true};
-        } else {
-          const blob = await res.blob();
-          if (blob.size === 0) throw new Error("Empty file");
-          let name = nameBase;
-          if (fixExt) {
-            const ext = extFromCT(ct) || "";
-            const baseNoExt = name.replace(/\.[^.]+$/, "");
-            name = baseNoExt + (ext || "");
-          }
-          folderZip.file(name, blob);
-          return {ok:true, name, url: u, repaired: false};
-        }
-      } catch (e) {
-        return {ok:false, url:u, error: e.message};
+        return res;
       }
+      const prox = origin.replace(/\/$/,'') + "/proxy?url=" + encodeURIComponent(u) + (ref ? "&ref=" + encodeURIComponent(ref) : "");
+      const res = await fetch(prox, { mode:"cors" });
+      if (!res.ok) throw new Error("HTTP "+res.status);
+      return res;
     }
 
     async function zipDownload() {
-      if (!urls.length) { alert("No URLs extracted yet."); return; }
+      if (!items.length) { alert("No URLs extracted yet."); return; }
       const useProxy = $("#useProxy").checked;
       const origin = ($("#proxyOrigin").value||"").trim();
       if (useProxy && !origin) { alert("Set Proxy origin or uncheck Use proxy."); return; }
 
       const folder = ($("#folderName").value||"images").trim();
       const concurrency = Math.max(1, Math.min(12, parseInt($("#concurrency").value||"4", 10)));
-      log(`Starting ZIP for ${urls.length} (concurrency=${concurrency}, proxy=${useProxy?origin:"no"})`);
+      log(`Starting ZIP for ${items.length} (concurrency=${concurrency}, proxy=${useProxy?origin:"no"})`);
 
       const zip = new JSZip();
       const folderZip = zip.folder(folder)||zip;
-      let done=0, failed=0; prog.max=urls.length; prog.value=0;
+      let done=0, failed=0; prog.max=items.length; prog.value=0;
       const manifest = [];
 
-      const tasks = urls.map((u, idx) => async () => {
-        const r = await fetchAsImageOrRepair(u, idx, folderZip, {});
-        if (r.ok) {
-          done++; manifest.push(`OK   ${r.name} <- ${r.url}${r.repaired ? " (repaired)" : ""}`);
-        } else {
-          failed++; manifest.push(`FAIL ${r.url} :: ${r.error}`);
-          log(`FAIL ${idx+1}: ${r.error}`);
+      const tasks = items.map((it, idx) => async () => {
+        try {
+          const res = await fetchBlobViaProxy(it.url, it.ref);
+          const ct = res.headers.get("content-type")||"";
+          if (!ct.startsWith("image/")) throw new Error("Non-image Content-Type: "+ct);
+          const blob = await res.blob();
+          if (blob.size === 0) throw new Error("Empty file");
+
+          let name = sanitize(String(idx+1).padStart(3,"0")+"_"+basename(it.url));
+          if ($("#fixExtensions").checked) {
+            const ext = extFromCT(ct) || "";
+            const baseNoExt = name.replace(/\.[^.]+$/, "");
+            name = baseNoExt + (ext || "");
+          }
+          folderZip.file(name, blob);
+          done++; manifest.push(`OK   ${name} <- ${it.url}${it.ref? " (ref "+it.ref+")":""}`);
+        } catch (e) {
+          failed++; manifest.push(`FAIL ${it.url}${it.ref? " (ref "+it.ref+")":""} :: ${e.message}`);
+          log(`FAIL ${idx+1}: ${e.message}`);
         }
         prog.value = done + failed;
-        if ((done+failed)%10===0 || done+failed===urls.length) log(`Progress ${done}/${urls.length}...`);
+        if ((done+failed)%10===0 || done+failed===items.length) log(`Progress ${done}/${items.length}...`);
       });
 
       const pool=[]; let i=0;
@@ -346,28 +333,10 @@
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a"); a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove();
       setTimeout(()=>URL.revokeObjectURL(url), 15000);
-      log(`ZIP ready: ${name}. Success: ${done}, Failed: ${failed}. Check _manifest.txt inside the ZIP for details.`);
-    }
-
-    async function multiDownload() {
-      if (!urls.length) { alert("No URLs extracted yet."); return; }
-      const prefix = ($("#folderName").value||"images").trim();
-      log("Starting direct multi-download...");
-      let idx = 0; prog.max = urls.length; prog.value = 0;
-      const next = () => {
-        if (idx>=urls.length) { log("All download requests queued."); return; }
-        const u = urls[idx];
-        const name = sanitize(String(idx+1).padStart(3,"0")+"_"+prefix+"_"+basename(u));
-        const a = document.createElement("a"); a.href=u; a.rel="noreferrer"; a.download=name;
-        document.body.appendChild(a); a.click(); a.remove();
-        idx++; prog.value = idx;
-        setTimeout(next, 300);
-      };
-      next();
+      log(`ZIP ready: ${name}. Success: ${done}, Failed: ${failed}. Check _manifest.txt for details.`);
     }
 
     $("#zipBtn").addEventListener("click", zipDownload);
-    $("#multiBtn").addEventListener("click", multiDownload);
   </script>
 </body>
 </html>
