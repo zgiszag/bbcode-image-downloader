@@ -1,19 +1,21 @@
-# BBCode Image Downloader (GitHub Pages) — v2
+# BBCode Image Downloader (GitHub Pages) — v3
 
-**New in v2**
-- Option to **use [url=...] targets** from BBCode.
-- Option to **resolve full‑size image URLs from the photo page** (tries `og:image`/`twitter:image`, then a heuristic). *Requires proxy*.
-- More robust ZIP fetching via the proxy with proper `Referer` header.
+**What v3 fixes**
+- Detects **HTML/403 pages saved as .jpg** and repairs by extracting the real image link (via proxy).
+- Corrects file extensions using response **Content-Type**.
+- Skips zero-byte files.
+- Writes a **_manifest.txt** inside the ZIP with OK/FAIL details.
+- Optional **URL rewrite** (regex) to convert thumbnail patterns (e.g. `/frame-thumb/` → `/full/`).
 
 ## Deploy
-1. Create a GitHub repo (e.g., `bbcode-image-downloader`), upload `index.html`, `proxy-server.js`, and `.nojekyll`.
-2. Enable GitHub Pages (Settings → Pages → Deploy from a branch → `main` / root).
+Upload `index.html`, `proxy-server.js`, and `.nojekyll` to a repo, enable GitHub Pages (branch: `main`, root).
 
 ## Use
 1. Paste HTML/BBCode.
 2. Tick **Use [url=...] targets** and **Resolve full-size from page**.
-3. Tick **Use proxy** and set it to `http://localhost:8787`.
-4. Click **Extract URLs** → **Download as ZIP**.
+3. Tick **Use proxy** and set `http://localhost:8787`.
+4. (Optional) Fill the rewrite fields if you know the host’s full-size pattern.
+5. Extract → **Download as ZIP**. Check `_manifest.txt` for details.
 
 ## Run the proxy
 ```bash

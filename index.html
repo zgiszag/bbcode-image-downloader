@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>BBCode Image Downloader</title>
   <style>
-    :root { --bg:#0b0f12; --card:#131a20; --muted:#8aa0b2; --text:#e7eef5; --accent:#69c; --danger:#f66; }
+    :root { --bg:#0b0f12; --card:#131a20; --muted:#8aa0b2; --text:#e7eef5; --accent:#69c; --danger:#f66; --ok:#6c6; }
     *{box-sizing:border-box}html,body{height:100%}
     body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;background:linear-gradient(145deg,#0b0f12,#0e1216 55%,#0b0f12);color:var(--text)}
     .container{max-width:1100px;margin:32px auto;padding:0 16px}
@@ -15,7 +15,7 @@
     textarea{width:100%;min-height:220px;resize:vertical;background:#0f1419;color:var(--text);border:1px solid #1f2a33;border-radius:10px;padding:10px 12px;line-height:1.35}
     label{font-size:13px;color:var(--muted)}
     input[type="text"],input[type="number"]{width:100%;height:38px;background:#0f1419;color:var(--text);border:1px solid #1f2a33;border-radius:10px;padding:0 12px}
-    .controls{display:grid;grid-template-columns:1.2fr 1fr 1fr 1fr;gap:10px;align-items:end;margin-top:10px}
+    .controls{display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr;gap:10px;align-items:end;margin-top:10px}
     .controls .field{display:flex;flex-direction:column;gap:6px}
     .btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
     button{appearance:none;border:1px solid #2a3742;background:#13202b;color:var(--text);padding:10px 14px;border-radius:12px;cursor:pointer;font-weight:600}
@@ -24,13 +24,14 @@
     .preview{margin-top:14px;display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(120px,1fr))}
     .thumb{position:relative;border-radius:12px;overflow:hidden;background:#0f1419;border:1px solid #1f2a33;aspect-ratio:1/1;display:flex;align-items:center;justify-content:center}
     .thumb img{width:100%;height:100%;object-fit:cover;display:block}.thumb .ix{position:absolute;top:6px;left:6px;background:rgba(0,0,0,.55);padding:2px 6px;border-radius:7px;font-size:12px}
-    .log{background:#0f1419;border:1px solid #1f2a33;border-radius:10px;padding:10px 12px;height:160px;overflow:auto;white-space:pre-wrap;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;color:#cfe2f2}
+    .log{background:#0f1419;border:1px solid #1f2a33;border-radius:10px;padding:10px 12px;height:180px;overflow:auto;white-space:pre-wrap;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;color:#cfe2f2}
     .progress-wrap{margin-top:12px}progress{width:100%;height:16px}
     .note{color:var(--muted);font-size:13px;margin-top:8px}
     .pill{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:999px;background:#0f1b23;border:1px solid #23323e;font-size:12px;color:var(--muted)}
     .tog{display:flex;align-items:center;gap:8px}
-    .two{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px}
-    .two .tog{border:1px solid #23323e;background:#0f1b23;padding:6px 10px;border-radius:10px}
+    .chips{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px}
+    .chips .tog{border:1px solid #23323e;background:#0f1b23;padding:6px 10px;border-radius:10px}
+    .twocol{display:grid;grid-template-columns:1fr 1fr; gap:10px; align-items:end; margin-top:10px}
   </style>
 </head>
 <body>
@@ -60,16 +61,29 @@
           </div>
         </div>
 
-        <div class="two">
+        <div class="chips">
           <label class="tog"><input id="useUrlTargets" type="checkbox" /> Use [url=...] targets</label>
           <label class="tog"><input id="resolveFull" type="checkbox" /> Resolve full-size from page (via proxy)</label>
           <label class="tog"><input id="preferOg" type="checkbox" checked /> Prefer og:image/twitter:image</label>
+          <label class="tog"><input id="repairNonImages" type="checkbox" checked /> Auto-repair non-image responses</label>
+          <label class="tog"><input id="fixExtensions" type="checkbox" checked /> Fix file extension by Content-Type</label>
+        </div>
+
+        <div class="twocol">
+          <div class="field">
+            <label for="rewriteFrom">Optional rewrite: Search (regex)</label>
+            <input id="rewriteFrom" type="text" placeholder="/frame-thumb/" />
+          </div>
+          <div class="field">
+            <label for="rewriteTo">Replace with</label>
+            <input id="rewriteTo" type="text" placeholder="/full/" />
+          </div>
         </div>
 
         <div class="btns">
           <button id="extractBtn">Extract URLs</button>
           <button id="zipBtn">Download as ZIP</button>
-          <button id="multiBtn">Direct multi‑download</button>
+          <button id="multiBtn">Direct multi-download</button>
           <button id="clearBtn" class="btn-danger">Clear</button>
         </div>
 
@@ -81,7 +95,7 @@
 
         <div class="progress-wrap">
           <progress id="prog" value="0" max="100"></progress>
-          <div class="note">If you see many <b>Failed to fetch</b>, enable <b>Use proxy</b> and run the included proxy. For full images from pages, check <b>Resolve full-size from page</b> (requires proxy).</div>
+          <div class="note">If you see “files don’t open”, it’s often an HTML/403 page saved as .jpg. v3 auto-detects and tries to repair by fetching the real image from the page. Use the proxy.</div>
         </div>
 
         <div class="log" id="log" aria-live="polite"></div>
@@ -94,7 +108,7 @@
     </div>
 
     <p class="note" style="margin-top:14px">
-      ZIP mode gathers files via <code>fetch</code>; many hosts block cross-origin or need a Referer. The proxy adds those headers server-side. Direct multi-download uses normal browser downloads (fewer CORS issues, but no ZIP/folder control).
+      ZIP mode uses <code>fetch</code>. For hosts with CORS or hotlink protection, tick <b>Use proxy</b>. This build validates <em>Content-Type</em>, fixes file extensions, skips zero-byte files, and attempts to repair non-image responses by extracting the real image from the HTML.
     </p>
   </div>
 
@@ -106,43 +120,57 @@
     let urls = []; // final list of image URLs
 
     const sanitize = s => s.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 100);
-    const basename = (u) => {
-      try { const x = new URL(u); return (x.pathname.split("/").pop()||"file").split("?")[0]; }
-      catch { return "file"; }
+    const extFromCT = (ct) => {
+      ct = (ct||"").toLowerCase();
+      if (ct.includes("jpeg")) return ".jpg";
+      if (ct.includes("png")) return ".png";
+      if (ct.includes("gif")) return ".gif";
+      if (ct.includes("webp")) return ".webp";
+      if (ct.includes("bmp")) return ".bmp";
+      if (ct.includes("svg")) return ".svg";
+      return "";
     };
+    const basename = (u) => { try { const x = new URL(u); return (x.pathname.split("/").pop()||"file").split("?")[0]; } catch { return "file"; } };
+    const makeAbs = (maybeUrl, base) => { try { return new URL(maybeUrl, base).toString(); } catch { return maybeUrl; } };
     const log = (m)=>{ const ts=new Date().toLocaleTimeString(); logEl.textContent += `[${ts}] ${m}\n`; logEl.scrollTop=logEl.scrollHeight; };
 
     function extractFromBBCode(text) {
       const found = [];
-      // capture [img]...[/img]
       const reImg = /\[img\]([^\[]+?)\[\/img\]/gi;
       let m; while ((m = reImg.exec(text)) !== null) found.push(m[1].trim());
-      // capture <img src="...">
       const reHtml = /<img[^>]+src=['"]([^'">]+)['"]/gi;
       while ((m = reHtml.exec(text)) !== null) found.push(m[1].trim());
-      // generic image URLs
       const reUrl = /(https?:\/\/[\w\-._~:/?#\[\]@!$&'()*+,;=%]+\.(?:png|jpe?g|gif|webp|bmp|svg)(?:\?[^\s'"]*)?)/gi;
       while ((m = reUrl.exec(text)) !== null) found.push(m[1].trim());
       return found;
     }
-
     function extractPageLinks(text) {
       const targets = [];
       const reUrlTag = /\[url=([^\]]+)\][\s\S]*?\[\/url\]/gi;
       let m; while ((m = reUrlTag.exec(text)) !== null) { targets.push(m[1].trim()); }
       return targets;
     }
-
     function uniqHttp(list) {
       const uniq = [], seen = new Set();
-      for (const u of list) {
+      for (let u of list) {
         if (!/^https?:\/\//i.test(u)) continue;
         if (seen.has(u)) continue;
         seen.add(u); uniq.push(u);
       }
       return uniq;
     }
-
+    function applyRewrite(list) {
+      const from = $("#rewriteFrom").value.trim();
+      const to = $("#rewriteTo").value;
+      if (!from) return list;
+      try {
+        const rx = new RegExp(from);
+        return list.map(u => u.replace(rx, to));
+      } catch {
+        log("Rewrite regex invalid; skipping.");
+        return list;
+      }
+    }
     function renderPreview(list) {
       preview.innerHTML = "";
       list.forEach((u,i)=>{
@@ -165,17 +193,15 @@
           const res = await fetch(origin.replace(/\/$/,'') + "/proxy?url=" + encodeURIComponent(p), { mode:"cors" });
           if (!res.ok) throw new Error("HTTP "+res.status);
           const html = await res.text();
-          // Try og:image or twitter:image first
-          let m;
-          m = html.match(/<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/i);
-          if (!m) m = html.match(/<meta\s+name=["']twitter:image["']\s+content=["']([^"']+)["']/i);
-          // Fallback: first plausible <img> (very light heuristic)
+          const base = p;
+          let m = html.match(/<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/i) ||
+                  html.match(/<meta\s+name=["']twitter:image["']\s+content=["']([^"']+)["']/i);
           if (!m) {
             const imgs = Array.from(html.matchAll(/<img[^>]+src=["']([^"']+)["'][^>]*>/gi)).map(mm=>mm[1]);
             const pref = imgs.find(u=>/\.(?:jpg|jpeg|png|webp)(?:\?|$)/i.test(u) && /full|large|big|photo/i.test(u));
-            out.push(pref || imgs[0] || p);
+            out.push(makeAbs(pref || imgs[0] || p, base));
           } else {
-            out.push(m[1]);
+            out.push(makeAbs(m[1], base));
           }
         } catch(e) {
           log("Resolve FAIL: "+p+" — "+e.message);
@@ -192,7 +218,7 @@
       const useTargets = $("#useUrlTargets").checked;
       const wantResolve = $("#resolveFull").checked;
 
-      const imgCandidates = extractFromBBCode(text);
+      let imgCandidates = extractFromBBCode(text);
       let final = uniqHttp(imgCandidates);
 
       if (useTargets) {
@@ -207,12 +233,14 @@
         }
       }
 
+      final = applyRewrite(final);
+
       urls = final;
       countEl.textContent = String(imgCandidates.length);
       validEl.textContent = String(final.length);
       dupesEl.textContent = String(imgCandidates.length - final.length);
       renderPreview(urls);
-      log(`Found ${final.length} valid URLs (images + ${useTargets ? "targets" : "no targets"}).`);
+      log(`Prepared ${final.length} URLs.`);
     });
 
     $("#clearBtn").addEventListener("click", () => {
@@ -220,6 +248,62 @@
       countEl.textContent = validEl.textContent = dupesEl.textContent = "0";
       preview.innerHTML = ""; prog.value = 0; logEl.textContent="";
     });
+
+    async function fetchAsImageOrRepair(u, idx, folderZip, opts) {
+      const useProxy = $("#useProxy").checked;
+      const origin = ($("#proxyOrigin").value||"").trim();
+      const repair = $("#repairNonImages").checked;
+      const fixExt = $("#fixExtensions").checked;
+
+      const nameBase = sanitize(String(idx+1).padStart(3,"0")+"_"+basename(u));
+      const target = useProxy ? origin.replace(/\/$/,'') + "/proxy?url=" + encodeURIComponent(u) : u;
+
+      try {
+        let res = await fetch(target, { mode:"cors", referrerPolicy:"no-referrer" });
+        if (!res.ok) throw new Error("HTTP "+res.status);
+        const ct = res.headers.get("content-type") || "";
+        if (!ct.startsWith("image/")) {
+          const text = await res.text();
+          if (!repair) throw new Error("Non-image content ("+ct+"), repair disabled");
+          let m = text.match(/<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/i) ||
+                  text.match(/<meta\s+name=["']twitter:image["']\s+content=["']([^"']+)["']/i);
+          let cand = m ? m[1] : null;
+          if (!cand) {
+            const imgs = Array.from(text.matchAll(/<img[^>]+src=["']([^"']+)["'][^>]*>/gi)).map(mm=>mm[1]);
+            cand = imgs.find(x=>/\.(?:jpg|jpeg|png|webp|gif)(?:\?|$)/i.test(x)) || imgs[0];
+          }
+          if (!cand) throw new Error("Non-image response; no image candidate found");
+          const abs = makeAbs(cand, u);
+          const prox = useProxy ? origin.replace(/\/$/,'') + "/proxy?url=" + encodeURIComponent(abs) : abs;
+          res = await fetch(prox, { mode:"cors", referrerPolicy:"no-referrer" });
+          if (!res.ok) throw new Error("Repair fetch failed HTTP "+res.status);
+          const ct2 = res.headers.get("content-type") || "";
+          const blob2 = await res.blob();
+          if (blob2.size === 0) throw new Error("Repaired image is empty");
+          let name = nameBase;
+          if (fixExt) {
+            const ext = extFromCT(ct2) || "";
+            const baseNoExt = name.replace(/\.[^.]+$/, "");
+            name = baseNoExt + (ext || "");
+          }
+          folderZip.file(name, blob2);
+          return {ok:true, name, url: u, repaired: true};
+        } else {
+          const blob = await res.blob();
+          if (blob.size === 0) throw new Error("Empty file");
+          let name = nameBase;
+          if (fixExt) {
+            const ext = extFromCT(ct) || "";
+            const baseNoExt = name.replace(/\.[^.]+$/, "");
+            name = baseNoExt + (ext || "");
+          }
+          folderZip.file(name, blob);
+          return {ok:true, name, url: u, repaired: false};
+        }
+      } catch (e) {
+        return {ok:false, url:u, error: e.message};
+      }
+    }
 
     async function zipDownload() {
       if (!urls.length) { alert("No URLs extracted yet."); return; }
@@ -234,21 +318,18 @@
       const zip = new JSZip();
       const folderZip = zip.folder(folder)||zip;
       let done=0, failed=0; prog.max=urls.length; prog.value=0;
+      const manifest = [];
 
       const tasks = urls.map((u, idx) => async () => {
-        const name = sanitize(String(idx+1).padStart(3,"0")+"_"+basename(u));
-        const target = useProxy ? origin.replace(/\/$/,'') + "/proxy?url=" + encodeURIComponent(u) : u;
-        try {
-          const res = await fetch(target, { mode:"cors", referrerPolicy:"no-referrer" });
-          if (!res.ok) throw new Error("HTTP "+res.status);
-          const blob = await res.blob();
-          folderZip.file(name, blob);
-          done++; prog.value = done+failed;
-          if ((done+failed)%10===0 || done+failed===urls.length) log(`Fetched ${done}/${urls.length}...`);
-        } catch(e) {
-          failed++; prog.value = done+failed;
-          log("FAIL "+name+": "+e.message);
+        const r = await fetchAsImageOrRepair(u, idx, folderZip, {});
+        if (r.ok) {
+          done++; manifest.push(`OK   ${r.name} <- ${r.url}${r.repaired ? " (repaired)" : ""}`);
+        } else {
+          failed++; manifest.push(`FAIL ${r.url} :: ${r.error}`);
+          log(`FAIL ${idx+1}: ${r.error}`);
         }
+        prog.value = done + failed;
+        if ((done+failed)%10===0 || done+failed===urls.length) log(`Progress ${done}/${urls.length}...`);
       });
 
       const pool=[]; let i=0;
@@ -257,6 +338,7 @@
       }
       await Promise.all(pool);
 
+      folderZip.file("_manifest.txt", manifest.join("\n"));
       log("Packaging ZIP...");
       const blob = await zip.generateAsync({type:"blob", compression:"DEFLATE", compressionOptions:{level:6}});
       const ts = new Date().toISOString().replace(/[:.]/g,"-");
@@ -264,13 +346,13 @@
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a"); a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove();
       setTimeout(()=>URL.revokeObjectURL(url), 15000);
-      log(`ZIP ready: ${name}. Success: ${done}, Failed: ${failed}.`);
+      log(`ZIP ready: ${name}. Success: ${done}, Failed: ${failed}. Check _manifest.txt inside the ZIP for details.`);
     }
 
     async function multiDownload() {
       if (!urls.length) { alert("No URLs extracted yet."); return; }
       const prefix = ($("#folderName").value||"images").trim();
-      log("Starting direct multi‑download...");
+      log("Starting direct multi-download...");
       let idx = 0; prog.max = urls.length; prog.value = 0;
       const next = () => {
         if (idx>=urls.length) { log("All download requests queued."); return; }
