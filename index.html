@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BBCode Image Downloader</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <style>
+    :root {
+      --bg: #0b0f12;
+      --card: #131a20;
+      --muted: #8aa0b2;
+      --text: #e7eef5;
+      --accent: #69c;
+      --danger: #f66;
+      --ok: #6c6;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+      background: linear-gradient(145deg, #0b0f12, #0e1216 55%, #0b0f12);
+      color: var(--text);
+    }
+    .container { max-width: 1100px; margin: 32px auto; padding: 0 16px; }
+    h1 { margin: 0 0 12px; font-size: 28px; letter-spacing: .3px; }
+    .card {
+      background: var(--card);
+      border: 1px solid #1b232a;
+      border-radius: 14px;
+      padding: 16px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.25);
+    }
+    .row { display: grid; gap: 12px; }
+    @media (min-width: 900px) { .row { grid-template-columns: 2fr 1.2fr; } }
+    textarea {
+      width: 100%; min-height: 220px; resize: vertical;
+      background: #0f1419; color: var(--text); border: 1px solid #1f2a33; border-radius: 10px;
+      padding: 10px 12px; line-height: 1.35;
+    }
+    label { font-size: 13px; color: var(--muted); }
+    input[type="text"], input[type="number"] {
+      width: 100%; height: 38px; background: #0f1419; color: var(--text);
+      border: 1px solid #1f2a33; border-radius: 10px; padding: 0 12px;
+    }
+    .controls {
+      display: grid; grid-template-columns: 1.2fr 1fr 1fr 1fr; gap: 10px; align-items: end; margin-top: 10px;
+    }
+    .controls .field { display: flex; flex-direction: column; gap: 6px; }
+    .btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    button {
+      appearance: none; border: 1px solid #2a3742; background: #13202b; color: var(--text);
+      padding: 10px 14px; border-radius: 12px; cursor: pointer; font-weight: 600;
+      transition: transform .04s ease, background .2s ease, border-color .2s ease;
+    }
+    button:hover { background: #0f1921; border-color: #3b4d5a; }
+    button:active { transform: translateY(1px); }
+    .btn-accent { background: #165077; border-color: #1c6ea4; }
+    .btn-accent:hover { background: #134463; }
+    .btn-quiet { background: #0e151a; }
+    .btn-danger { background: #3a1010; border-color: #6e1f1f; }
+    .kpi { display:flex; gap:18px; flex-wrap: wrap; margin: 10px 0 0; color: var(--muted); font-size: 14px;}
+    .kpi b { color: var(--text); }
+    .preview { margin-top: 14px; display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+    .thumb {
+      position: relative; border-radius: 12px; overflow: hidden; background: #0f1419; border: 1px solid #1f2a33;
+      aspect-ratio: 1 / 1; display:flex; align-items:center; justify-content:center;
+    }
+    .thumb img { width: 100%; height: 100%; object-fit: cover; display:block; }
+    .thumb .ix { position:absolute; top:6px; left:6px; background: rgba(0,0,0,.55); padding:2px 6px; border-radius: 7px; font-size: 12px;}
+    .log {
+      background: #0f1419; border: 1px solid #1f2a33; border-radius: 10px; padding: 10px 12px;
+      height: 160px; overflow: auto; white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px; color: #cfe2f2;
+    }
+    .progress-wrap { margin-top: 12px; }
+    progress { width: 100%; height: 16px; }
+    .note { color: var(--muted); font-size: 13px; margin-top: 8px; }
+    .pill { display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border-radius: 999px; background:#0f1b23; border:1px solid #23323e; font-size:12px; color: var(--muted); }
+    .toggle { display:flex; align-items:center; gap:8px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>BBCode Image Downloader</h1>
+    <div class="card row">
+      <div>
+        <label for="inputText">Paste your HTML / BBCode</label>
+        <textarea id="inputText" placeholder="[img]https://example.com/pic.jpg[/img] ..."></textarea>
+
+        <div class="controls">
+          <div class="field">
+            <label for="folderName">Folder name (used inside ZIP & as filename prefix)</label>
+            <input id="folderName" type="text" value="images_${new Date().toISOString().slice(0,10)}" />
+          </div>
+          <div class="field">
+            <label for="concurrency">Concurrency</label>
+            <input id="concurrency" type="number" min="1" max="12" value="4" />
+          </div>
+          <div class="field">
+            <label for="proxyOrigin">Proxy server (optional, e.g. http://localhost:8787)</label>
+            <input id="proxyOrigin" type="text" placeholder="http://localhost:8787" />
+          </div>
+          <div class="field toggle">
+            <input id="useProxy" type="checkbox" />
+            <label for="useProxy">Use proxy for ZIP</label>
+          </div>
+        </div>
+
+        <div class="btns">
+          <button id="extractBtn" class="btn-accent">Extract URLs</button>
+          <button id="zipBtn">Download as ZIP (best)</button>
+          <button id="multiBtn" class="btn-quiet">Direct multi‑download</button>
+          <button id="clearBtn" class="btn-danger">Clear</button>
+        </div>
+
+        <div class="kpi" id="kpi">
+          <div class="pill">Found: <b id="count">0</b></div>
+          <div class="pill">Valid: <b id="valid">0</b></div>
+          <div class="pill">Duplicates removed: <b id="dupes">0</b></div>
+        </div>
+
+        <div class="progress-wrap">
+          <progress id="prog" value="0" max="100"></progress>
+          <div class="note">ZIP mode may require a proxy due to CORS or hotlink protection. Try without first; if some fail, enable <b>Use proxy</b> and run the provided Node server.</div>
+        </div>
+
+        <div class="log" id="log" aria-live="polite"></div>
+      </div>
+
+      <div>
+        <label>Preview</label>
+        <div id="preview" class="preview"></div>
+      </div>
+    </div>
+
+    <p class="note" style="margin-top:14px">
+      Tip: For <b>Direct multi‑download</b>, Chrome may ask to allow multiple automatic downloads. Allow it. To choose a folder, set your Downloads location beforehand (or enable “Ask where to save each file” in Chrome settings). ZIP mode puts everything into a single <code>.zip</code> with your chosen folder name inside.
+    </p>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script>
+    const $ = sel => document.querySelector(sel);
+    const logEl = $("#log");
+    const preview = $("#preview");
+    const prog = $("#prog");
+    const countEl = $("#count");
+    const validEl = $("#valid");
+    const dupesEl = $("#dupes");
+
+    let urls = [];
+
+    function log(msg) {
+      const ts = new Date().toLocaleTimeString();
+      logEl.textContent += `[${ts}] ${msg}\n`;
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function extractUrls(text) {
+      const found = [];
+      const re1 = /\[img\]([^[\]]+?)\[\/img\]/gi;
+      let m;
+      while ((m = re1.exec(text)) !== null) { found.push(m[1].trim()); }
+      const re2 = /<img[^>]+src=['"]([^'">]+)['"]/gi;
+      while ((m = re2.exec(text)) !== null) { found.push(m[1].trim()); }
+      const re3 = /(https?:\/\/[\w\-._~:/?#\[\]@!$&'()*+,;=%]+\.(?:png|jpe?g|gif|webp|bmp|svg)(?:\?[^\s'"]*)?)/gi;
+      while ((m = re3.exec(text)) !== null) { found.push(m[1].trim()); }
+
+      const uniq = []; const seen = new Set();
+      for (const u of found) {
+        if (!/^https?:\/\//i.test(u)) continue;
+        if (seen.has(u)) continue;
+        seen.add(u); uniq.push(u);
+      }
+      return { uniq, total: found.length, deduped: found.length - uniq.length };
+    }
+
+    function basename(url) {
+      try {
+        const u = new URL(url);
+        const name = u.pathname.split('/').pop() || 'file';
+        return name.split('?')[0];
+      } catch { return 'file'; }
+    }
+    const sanitize = s => s.replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 100);
+
+    function renderPreview(list) {
+      preview.innerHTML = '';
+      list.forEach((u, i) => {
+        const div = document.createElement('div');
+        div.className = 'thumb';
+        const img = document.createElement('img');
+        img.loading = 'lazy';
+        img.referrerPolicy = 'no-referrer';
+        img.src = u;
+        const ix = document.createElement('div');
+        ix.className = 'ix';
+        ix.textContent = String(i+1);
+        div.appendChild(img);
+        div.appendChild(ix);
+        preview.appendChild(div);
+      });
+    }
+
+    $("#extractBtn").addEventListener('click', () => {
+      const text = $("#inputText").value || '';
+      const { uniq, total, deduped } = extractUrls(text);
+      urls = uniq;
+      countEl.textContent = String(total);
+      validEl.textContent = String(uniq.length);
+      dupesEl.textContent = String(deduped);
+      renderPreview(urls);
+      log(`Found ${uniq.length} valid image URLs.`);
+    });
+
+    $("#clearBtn").addEventListener('click', () => {
+      $("#inputText").value = '';
+      urls = [];
+      countEl.textContent = '0';
+      validEl.textContent = '0';
+      dupesEl.textContent = '0';
+      preview.innerHTML = '';
+      prog.value = 0;
+      logEl.textContent = '';
+    });
+
+    async function downloadZip() {
+      if (!urls.length) { alert('No URLs extracted yet.'); return; }
+      const folder = ($("#folderName").value || 'images').trim();
+      const concurrency = Math.max(1, Math.min(12, parseInt($("#concurrency").value || '4', 10)));
+      const useProxy = $("#useProxy").checked;
+      const proxyOrigin = ($("#proxyOrigin").value || '').trim();
+      if (useProxy && !proxyOrigin) { alert('Enter proxy origin or uncheck Use proxy.'); return; }
+
+      log(`Starting ZIP download for ${urls.length} images (concurrency=${concurrency}, proxy=${useProxy ? proxyOrigin : 'no'})...`);
+      const zip = new JSZip();
+      const folderZip = zip.folder(folder) || zip;
+      let done = 0, failed = 0;
+      prog.max = urls.length; prog.value = 0;
+
+      const tasks = urls.map((u, idx) => async () => {
+        const nameBase = sanitize(`${String(idx+1).padStart(3,'0')}_${basename(u)}`);
+        const proxied = useProxy ? `${proxyOrigin.replace(/\/$/,'')}/proxy?url=${encodeURIComponent(u)}` : u;
+        try {
+          const res = await fetch(proxied, { referrerPolicy: 'no-referrer', mode: 'cors' });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const blob = await res.blob();
+          folderZip.file(nameBase, blob);
+          done++; prog.value = done + failed;
+          if ((done+failed) % 5 === 0 || done+failed === urls.length) log(`Fetched ${done}/${urls.length}...`);
+        } catch (e) {
+          failed++; prog.value = done + failed;
+          log(`FAIL ${nameBase}: ${e.message}`);
+        }
+      });
+
+      const pool = [];
+      let i = 0;
+      for (let k = 0; k < concurrency; k++) {
+        pool.push((async function worker(){
+          while (i < tasks.length) {
+            const t = tasks[i++];
+            await t();
+          }
+        })());
+      }
+      await Promise.all(pool);
+
+      log(`Packaging ZIP...`);
+      const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+      const ts = new Date().toISOString().replace(/[:.]/g,'-');
+      const zipName = `${sanitize(folder)}_${ts}.zip`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = zipName;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url), 20000);
+      log(`ZIP ready: ${zipName}. Success: ${done}, Failed: ${failed}.`);
+    }
+
+    async function multiDownload() {
+      if (!urls.length) { alert('No URLs extracted yet.'); return; }
+      const prefix = ($("#folderName").value || 'images').trim();
+      log('Starting direct multi‑download... allow multiple downloads when prompted.');
+      let idx = 0;
+      function next() {
+        if (idx >= urls.length) { log('All download requests queued.'); return; }
+        const u = urls[idx];
+        const name = sanitize(`${String(idx+1).padStart(3,'0')}_${prefix}_${basename(u)}`);
+        const a = document.createElement('a');
+        a.href = u; a.rel = "noreferrer"; a.download = name;
+        document.body.appendChild(a); a.click(); a.remove();
+        idx++; prog.max = urls.length; prog.value = idx;
+        setTimeout(next, 350);
+      }
+      next();
+    }
+
+    $("#zipBtn").addEventListener('click', downloadZip);
+    $("#multiBtn").addEventListener('click', multiDownload);
+  </script>
+</body>
+</html>
